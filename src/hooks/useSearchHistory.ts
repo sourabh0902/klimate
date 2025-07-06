@@ -1,0 +1,59 @@
+import type { SearchHistoryItem } from "@/types/propsTypes";
+import { useLocalStorage } from "./useLocalStorage";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+export function useSearchHistory() {
+
+    const [history, setHistory] = useLocalStorage<SearchHistoryItem[]>('search-history', [])
+
+    const queryClient = useQueryClient()
+
+    //  Getting the History
+    const historyQuery = useQuery({
+        queryKey: ['search-history'],
+        queryFn: () => history, // Returns current history from localstorage
+        initialData: history,
+    })
+
+    // Function to run when adding a new search
+    const addToHistory = useMutation({
+        mutationFn: async (search: Omit<SearchHistoryItem, 'id' | 'searchedAt'>) => {
+            // a new search object with id and searchedAt
+            const newSearch: SearchHistoryItem = {
+                ...search,
+                id: `${search.lat}-${search.lon}-${Date.now()}`,
+                searchedAt: Date.now(),
+            };
+
+            const filteredHistory = history.filter((item) => !(item.lat === search.lat && item.lon === search.lon))
+
+            const newHistory = [newSearch, ...filteredHistory].slice(0, 10);
+
+            setHistory(newHistory)
+            return newHistory;
+        },
+
+        //  After mutation, updates the React Query cache for 'search-history' with the new history.
+        onSuccess: (newHistory) => {
+            queryClient.setQueryData(['search-history'], newHistory)
+        }
+    })
+
+    const clearHistory = useMutation({
+        mutationFn: async () => {
+            setHistory([])
+            return []
+        },
+
+        onSuccess: () => {
+            queryClient.setQueryData(['search-history'], [])
+        }
+    })
+
+    return {
+        history: historyQuery,
+        addToHistory,
+        clearHistory
+    }
+
+}
